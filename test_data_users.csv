@@ -1,0 +1,16 @@
+test_id,username,password,firstname,lastname,email,city,country,force_password_change,suspended,cancel,verify_after_login,Expected Result
+TC-004-001,thuan,,thuan,truong,thuan@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Required
+TC-004-002,thuan123,t,thuan,truong,thuan@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Changes saved
+TC-004-003,abcde12345abcde12345abcde12345abcde12345abcde12345abcde12345abcde12345abcde12345abcde12345abcde1234,t123,thuan,truong,thuan1@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Changes saved
+TC-004-004,thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345,t123,thuan,truong,thuan12@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Changes saved
+TC-004-005,thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan12345thuan123456,t123,thuan,truong,thuan123@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Error writing to database
+TC-004-006,thuan1,t123,thuan,truong,thuan1234@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Changes saved
+TC-004-007,thuan2,t123,thuan,truong,thuan2gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Invalid email address
+TC-004-008,Thuan 1,t123,thuan,truong,thuan3@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Only lowercase letters allowed
+TC-004-009,thuan3,t123,thuan,truong,thuan3@gmail.com,Ho Chi Minh city,Viet Nam,true,false,false,true,You must change your password to proceed.
+TC-004-010,thuan5,t123,thuan,truong,thuan5@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,true,"Welcome, thuan! 👋"
+TC-004-011,thuan6,t123,thuan,truong,thuan6@gmail.com,Ho Chi Minh city,Viet Nam,false,true,false,true,Your login info may be incorrect. Please try again.
+TC-004-012,thuan7,t123,thuan,truong,thuan7@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,Changes saved
+TC-004-013,thuan7,t123,thuan,truong,thuan8@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,"This username already exists, choose another"
+TC-004-014,thuan8,t123,thuan,truong,thuan7@gmail.com,Ho Chi Minh city,Viet Nam,false,false,false,false,This email address is already registered.
+TC-004-015,thuan8,t123,thuan,truong,thuan8@gmail.com,Ho Chi Minh city,Viet Nam,false,false,true,false,Mount Orange
