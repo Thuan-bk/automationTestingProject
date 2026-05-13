@@ -8,6 +8,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import NoAlertPresentException
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import ElementClickInterceptedException
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.common.exceptions import WebDriverException
 import csv
 import os
@@ -126,9 +127,36 @@ class addNewUser(unittest.TestCase):
         return "ERR_NETWORK_CHANGED" in text or "Your connection was interrupted" in text
 
     def accept_cookie_notice_if_present(self):
+        text = self.page_text()
+        if "Error writing to database" in text or "Policy " in text:
+            return
         self.click_first_present([
-            ("xpath", "//button[normalize-space(.)='Continue']"),
-            ("xpath", "//a[normalize-space(.)='Continue']")
+            (
+                "xpath",
+                "//*[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie') "
+                "or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie') "
+                "or contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie')]"
+                "//button[normalize-space(.)='Continue']"
+            ),
+            (
+                "xpath",
+                "//*[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie') "
+                "or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie') "
+                "or contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie')]"
+                "//a[normalize-space(.)='Continue']"
+            ),
+            (
+                "xpath",
+                "//*[@role='dialog' or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'modal')]"
+                "[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie')]"
+                "//button[normalize-space(.)='Continue']"
+            ),
+            (
+                "xpath",
+                "//*[@role='dialog' or contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'modal')]"
+                "[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'cookie')]"
+                "//a[normalize-space(.)='Continue']"
+            )
         ])
 
     def safe_get(self, url, retries=2):
@@ -205,10 +233,14 @@ class addNewUser(unittest.TestCase):
         self.scroll_element_to_safe_view(element)
         try:
             element.click()
+        except StaleElementReferenceException:
+            raise
         except (ElementClickInterceptedException, WebDriverException):
             self.scroll_element_to_safe_view(element)
             try:
                 self.driver.execute_script("arguments[0].click();", element)
+            except StaleElementReferenceException:
+                raise
             except Exception:
                 self.driver.execute_script(
                     "arguments[0].dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true, view: window}));",
@@ -274,18 +306,25 @@ class addNewUser(unittest.TestCase):
             return self.driver.find_elements(By.LINK_TEXT, value)
         return []
 
-    def click_first_present(self, locators):
+    def click_first_present(self, locators, retries=2):
         self.driver.implicitly_wait(0)
         try:
-            for strategy, value in locators:
-                try:
-                    elements = self.find_optional_elements(strategy, value)
-                    for element in elements:
-                        if element.is_displayed() and element.is_enabled():
-                            self.click_element(element)
-                            return True
-                except Exception:
-                    pass
+            for unused_retry in range(retries):
+                for strategy, value in locators:
+                    try:
+                        elements = self.find_optional_elements(strategy, value)
+                        for element in elements:
+                            try:
+                                if element.is_displayed() and element.is_enabled():
+                                    self.click_element(element)
+                                    return True
+                            except StaleElementReferenceException:
+                                break
+                    except StaleElementReferenceException:
+                        pass
+                    except Exception:
+                        pass
+                time.sleep(0.1)
             return False
         finally:
             self.driver.implicitly_wait(1)
@@ -389,10 +428,16 @@ class addNewUser(unittest.TestCase):
 
     def verify_expected_result(self, test_data):
         expected_result = test_data.get("Expected Result", "")
-        for unused_index in range(5):
+        for unused_index in range(8):
             self.wait_for_page_ready()
+            actual_result = self.page_text()
+            if expected_result in actual_result:
+                return
+            if self.recover_network_error_if_present():
+                actual_result = self.page_text()
+                if expected_result in actual_result:
+                    return
             self.accept_cookie_notice_if_present()
-            self.recover_network_error_if_present()
             actual_result = self.page_text()
             if expected_result in actual_result:
                 return
@@ -407,50 +452,83 @@ class addNewUser(unittest.TestCase):
             )
         )
 
+    def select_policy_inputs_if_present(self):
+        selected_any = False
+        self.driver.implicitly_wait(0)
+        try:
+            inputs = self.find_all_xpath(
+                "//input[(starts-with(@name, 'status') or contains(@id, 'status') or "
+                "@type='checkbox' or @type='radio') and not(@disabled)]"
+            )
+            for index in range(len(inputs)):
+                try:
+                    fresh_inputs = self.find_all_xpath(
+                        "//input[(starts-with(@name, 'status') or contains(@id, 'status') or "
+                        "@type='checkbox' or @type='radio') and not(@disabled)]"
+                    )
+                    if index >= len(fresh_inputs):
+                        break
+                    policy_input = fresh_inputs[index]
+                    if not policy_input.is_selected():
+                        self.click_element(policy_input)
+                        selected_any = True
+                        time.sleep(0.1)
+                except StaleElementReferenceException:
+                    continue
+                except Exception:
+                    continue
+        finally:
+            self.driver.implicitly_wait(1)
+        return selected_any
+
+    def click_policy_next_if_present(self):
+        return self.click_first_present([
+            ("link_text", "Next"),
+            ("xpath", "//a[normalize-space(.)='Next']"),
+            ("xpath", "//button[normalize-space(.)='Next']"),
+            ("xpath", "//input[@type='submit' and @value='Next']")
+        ], retries=3)
+
+    def click_policy_submit_if_present(self):
+        return self.click_first_present([
+            ("xpath", "//button[contains(normalize-space(.), 'Save changes')]"),
+            ("xpath", "//input[@type='submit' and contains(@value, 'Save changes')]"),
+            ("xpath", "//button[contains(normalize-space(.), 'Agree')]"),
+            ("xpath", "//input[@type='submit' and contains(@value, 'Agree')]"),
+            ("name", "submit"),
+            ("css", "input[name='submit']"),
+            ("css", "button[type='submit']"),
+            ("xpath", "//button[normalize-space(.)='Continue']"),
+            ("xpath", "//input[@type='submit' and @value='Continue']"),
+            ("xpath", "//a[normalize-space(.)='Continue']")
+        ], retries=3)
+
     def complete_policy_pages_if_present(self, expected_result):
-        for unused_index in range(10):
+        for unused_index in range(15):
             self.wait_for_page_ready()
+            actual_text = self.page_text()
+            if expected_result in actual_text:
+                return
+
+            if "Policy " in actual_text and "Next" in actual_text:
+                if self.click_policy_next_if_present():
+                    self.wait_for_page_ready()
+                    time.sleep(0.6)
+                    continue
+
+            selected = self.select_policy_inputs_if_present()
+            if selected:
+                time.sleep(0.2)
+
+            if self.click_policy_submit_if_present():
+                self.wait_for_page_ready()
+                time.sleep(0.8)
+                continue
+
             self.accept_cookie_notice_if_present()
             if expected_result in self.page_text():
                 return
-
-            clicked = False
-            try:
-                status_inputs = self.find_all_xpath(
-                    "//input[starts-with(@name, 'status') or contains(@id, 'status') or "
-                    "@type='checkbox' or @type='radio']"
-                )
-                for status_input in status_inputs:
-                    if status_input.is_displayed() and status_input.is_enabled() and not status_input.is_selected():
-                        self.click_element(status_input)
-                        clicked = True
-                        time.sleep(0.1)
-            except Exception:
-                pass
-
-            if self.click_first_present([
-                ("link_text", "Next"),
-                ("xpath", "//a[normalize-space(.)='Next']"),
-                ("xpath", "//button[normalize-space(.)='Next']"),
-                ("xpath", "//input[@type='submit' and @value='Next']"),
-                ("link_text", "Continue"),
-                ("xpath", "//a[normalize-space(.)='Continue']"),
-                ("xpath", "//button[normalize-space(.)='Continue']"),
-                ("xpath", "//input[@type='submit' and @value='Continue']"),
-                ("name", "submit"),
-                ("css", "input[name='submit']"),
-                ("css", "button[type='submit']"),
-                ("xpath", "//button[contains(normalize-space(.), 'Save changes')]"),
-                ("xpath", "//input[@type='submit' and contains(@value, 'Save changes')]"),
-                ("xpath", "//button[contains(normalize-space(.), 'Agree')]"),
-                ("xpath", "//input[@type='submit' and contains(@value, 'Agree')]")
-            ]):
-                clicked = True
-                self.wait_for_page_ready()
-                time.sleep(0.5)
-
-            if not clicked:
-                return
+            return
 
     def login_as_created_user_and_verify(self, test_data):
         expected_result = test_data.get("Expected Result", "")
